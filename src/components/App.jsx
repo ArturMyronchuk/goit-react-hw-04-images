@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { useState, useEffect } from 'react';
 import Notiflix from 'notiflix';
 import { Loader } from './Loader/Loader';
 import { Searchbar } from './Searchbar/Searchbar';
@@ -7,78 +7,72 @@ import { AppStyled } from './App.styled';
 import { Button } from './Button/Button';
 
 import fetchImagesWithQuery from '../services/api';
+export const App = () => {
+  const [showLoadMoreBtn, setShowLoadMoreBtn] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hits, setHits] = useState([]);
+  const [page, setPage] = useState(1);
 
-export class App extends Component {
-  state = {
-    isLoading: false,
-    isError: false,
-    searchQuery: '',
-    hits: [],
-    page: 1,
-    loadMoreBtn: false,
-  };
+  useEffect(() => {
+    if (searchQuery === '') {
+      return;
+    }
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchImagesWithQuery(searchQuery, page);
+        const totalPages = Math.ceil(data.totalHits / 12);
 
-  fetchData = async () => {
-    const { searchQuery, page } = this.state;
-    this.setState({ isLoading: true });
-    try {
-      const data = await fetchImagesWithQuery(searchQuery, page);
-      const totalPages = Math.ceil(data.totalHits / 12);
-      if (data.hits.length === 0) {
-        Notiflix.Report.warning(
-          'Sorry!',
-          'There are no images matching your search query.',
-          'Try again.'
-        );
-        return;
+        if (page === 1) {
+          Notiflix.Report.success(
+            'Wonderful!',
+            `We found ${data.totalHits} images!`,
+            'Continue'
+          );
+        } else {
+          setTimeout(() => scroll(), 100);
+        }
+
+        if (data.hits.length === 0) {
+          Notiflix.Report.warning(
+            'Sorry!',
+            'There are no images matching your search query.',
+            'Try again.'
+          );
+          return;
+        }
+        setHits(hits => [...hits, ...data.hits]);
+
+        if (page >= totalPages) {
+          Notiflix.Report.info(
+            'Sorry!',
+            'This is the end of search results!',
+            'Ok'
+          );
+          setShowLoadMoreBtn(false);
+        }
+        if (page < totalPages) {
+          setShowLoadMoreBtn(true);
+        }
+      } catch (error) {
+        Error(true, Error);
+      } finally {
+        setIsLoading(false);
       }
-      this.setState(({ hits }) => ({
-        hits: [...hits, ...data.hits],
-        totalPages,
-      }));
+    };
+    fetchData();
+  }, [page, searchQuery]);
 
-      if (page === 1) {
-        Notiflix.Report.success(
-          'Wonderful!',
-          `We found ${data.totalHits} images!`,
-          'Continue'
-        );
-      } else {
-        setTimeout(() => this.scroll(), 100);
-      }
-
-      if (page >= totalPages) {
-        Notiflix.Report.info(
-          'Sorry!',
-          'This is the end of search results!',
-          'Ok'
-        );
-      }
-    } catch (error) {
-      this.setState({ isError: true, Error });
-    } finally {
-      this.setState({ isLoading: false });
+  const onSubmit = inputValue => {
+    if (searchQuery !== inputValue) {
+      setSearchQuery(inputValue);
+      setPage(1);
+      setHits([]);
     }
   };
 
-  componentDidUpdate(_, prevState) {
-    const { searchQuery, page } = this.state;
-    if (searchQuery !== prevState.searchQuery || page !== prevState.page) {
-      this.fetchData();
-    }
-  }
-
-  onSubmit = searchQuery => {
-    this.setState({ searchQuery, page: 1, hits: [] });
-  };
-
-  handleLoadMore = () => {
-    this.setState(prevState => ({
-      page: prevState.page + 1,
-    }));
-  };
-
-  scroll = () => {
+  const scroll = () => {
     const { clientHeight } = document.documentElement;
     window.scrollBy({
       top: clientHeight - 180,
@@ -86,22 +80,20 @@ export class App extends Component {
     });
   };
 
-  render() {
-    const { isLoading, hits, page, totalPages } = this.state;
-
-    return (
-      <>
-        <Searchbar onSubmit={this.onSubmit} />
-        <AppStyled>
-          {hits.length !== 0 && <Gallery hits={hits} />}
-          {isLoading ? (
-            <Loader />
-          ) : (
-            page < totalPages &&
-            hits.length !== 0 && <Button onLoadMore={this.handleLoadMore} />
-          )}
-        </AppStyled>
-      </>
-    );
-  }
-}
+  return (
+    <>
+      <AppStyled>
+        <Searchbar onSubmit={onSubmit} />
+        {hits.length !== 0 && <Gallery hits={hits} />}
+        {isLoading ? (
+          <Loader />
+        ) : (
+          hits.length !== 0 &&
+          showLoadMoreBtn && (
+            <Button onLoadMore={() => setPage(page => page + 1)} />
+          )
+        )}
+      </AppStyled>
+    </>
+  );
+};
